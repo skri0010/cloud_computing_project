@@ -1,0 +1,14 @@
+# ./ssh_config
+
+Host bastion
+  HostName 54.160.151.6
+  User ec2-user
+  IdentityFile ./labsuser.pem
+  IdentitiesOnly yes
+
+Host private-ec2
+  HostName 10.0.4.145
+  User ec2-user
+  IdentityFile ./labsuser.pem
+  ProxyJump bastion
+  IdentitiesOnly yes

@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: S3 bucket for uploads and RDS MySQL database for image metadata
+
+Resources:
+  UploadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "app-upload-bucket-${AWS::AccountId}-${AWS::Region}"
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      Tags:
+        - Key: Name
+          Value: UploadBucket
+
+  UploadBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UploadBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowPublicReadImages
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource:
+              - !Sub "arn:aws:s3:::${UploadBucket}/images/*"
+              - !Sub "arn:aws:s3:::${UploadBucket}/thumbnails/*"
+
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for MySQL DB
+      SubnetIds:
+        - !ImportValue PrivateSubnet3ID
+        - !ImportValue PrivateSubnet4ID
+      DBSubnetGroupName: rds-subnet-group
+
+  MySQLDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: app-db
+      AllocatedStorage: 20
+      DBInstanceClass: db.t3.micro
+      Engine: mysql
+      MasterUsername: admin
+      MasterUserPassword: password123
+      DBName: app
+      VPCSecurityGroups:
+        - !ImportValue RDSSecurityGroupID
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      PubliclyAccessible: false
+      MultiAZ: false
+      StorageType: gp2
+      BackupRetentionPeriod: 0
+
+Outputs:
+  UploadBucketName:
+    Value: !Ref UploadBucket
+    Export:
+      Name: UploadBucketName
+
+  RDSInstanceEndpoint:
+    Value: !GetAtt MySQLDB.Endpoint.Address
+    Export:
+      Name: RDSInstanceEndpoint
