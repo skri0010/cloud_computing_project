@@ -5,22 +5,22 @@ const {
 } = require("@aws-sdk/client-s3");
 const sharp = require("sharp");
 
-const s3 = new S3Client();
+const s3 = new S3Client({ region: "us-east-1" });
 
 exports.handler = async (event) => {
-  const record = event.Records[0];
-  const bucket = record.s3.bucket.name;
-  const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, " "));
-
-  // Only process images (optional safety)
-  if (!key.match(/\.(jpg|jpeg|png|webp)$/i)) {
-    console.log("Not an image file. Skipping.");
-    return;
-  }
-
-  const thumbnailKey = `thumbnails/${key.split("/").pop()}`;
-
   try {
+    // EventBridge format
+    const bucket = event.detail.bucket.name;
+    const key = decodeURIComponent(event.detail.object.key.replace(/\+/g, " "));
+
+    // Optional: skip non-image files
+    if (!key.match(/\.(jpg|jpeg|png|webp)$/i)) {
+      console.log("Not an image file. Skipping.");
+      return;
+    }
+
+    const thumbnailKey = `thumbnails/${key.split("/").pop()}`;
+
     // 1. Get the original image
     const originalImage = await s3.send(
       new GetObjectCommand({ Bucket: bucket, Key: key })
@@ -31,6 +31,7 @@ exports.handler = async (event) => {
     // 2. Create a thumbnail with Sharp
     const thumbnailBuffer = await sharp(imageBuffer)
       .resize({ width: 150 })
+      .jpeg() // You can change this to .png() if needed
       .toBuffer();
 
     // 3. Upload the thumbnail
@@ -39,17 +40,19 @@ exports.handler = async (event) => {
         Bucket: bucket,
         Key: thumbnailKey,
         Body: thumbnailBuffer,
-        ContentType: "image/jpeg", // or infer from original if needed
+        ContentType: "image/jpeg",
       })
     );
 
-    console.log(`Thumbnail saved at: ${thumbnailKey}`);
+    console.log(`✅ Thumbnail saved at: ${thumbnailKey}`);
+    return { statusCode: 200 };
   } catch (err) {
-    console.error("Error generating thumbnail:", err);
-    throw err;
+    console.error("❌ Error generating thumbnail:", err);
+    return { statusCode: 500, body: "Failed to generate thumbnail." };
   }
 };
 
+// Helper to convert stream to buffer
 function streamToBuffer(stream) {
   return new Promise((resolve, reject) => {
     const chunks = [];

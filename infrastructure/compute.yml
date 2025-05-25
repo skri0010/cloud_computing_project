@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Bastion and EC2 instance that clones GitHub repo and runs app
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair to SSH into instances
+
+Resources:
+  BastionHost:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref KeyName
+      ImageId: ami-0c2b8ca1dad447f8a # Amazon Linux 2 (update if region differs)
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          SubnetId: !ImportValue PublicSubnet1ID
+          DeviceIndex: 0
+          GroupSet:
+            - !ImportValue EC2InstanceSecurityGroupID
+      Tags:
+        - Key: Name
+          Value: BastionHost
+
+  AppInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref KeyName
+      ImageId: ami-0c2b8ca1dad447f8a
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          SubnetId: !ImportValue PrivateSubnet1ID
+          DeviceIndex: 0
+          GroupSet:
+            - !ImportValue EC2InstanceSecurityGroupID
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          curl -sL https://rpm.nodesource.com/setup_18.x | bash -
+          yum install -y nodejs git
+          git clone https://github.com/skri0010/cloud_computing_project.git /home/ec2-user/app
+          cd /home/ec2-user/app
+          npm install
+          npm start &
+      Tags:
+        - Key: Name
+          Value: AppInstance
+
+Outputs:
+  BastionHostId:
+    Description: ID of Bastion Host
+    Value: !Ref BastionHost
+
+  AppInstanceId:
+    Description: ID of App EC2 Instance
+    Value: !Ref AppInstance

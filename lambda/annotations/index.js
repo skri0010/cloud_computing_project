@@ -5,18 +5,24 @@ const {
 const mysql = require("mysql2/promise");
 const axios = require("axios");
 
-const secretsClient = new SecretsManagerClient();
+const secretsClient = new SecretsManagerClient({ region: "us-east-1" });
 
 exports.handler = async (event) => {
   try {
-    const record = event.Records[0];
-    const bucket = record.s3.bucket.name;
-    const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, " "));
+    let bucket = "";
+    let key = "";
+    if (event.detail) {
+      // EventBridge event format
+      bucket = event.detail.bucket.name;
+      key = decodeURIComponent(event.detail.object.key.replace(/\+/g, " "));
+    } else {
+      throw new Error("Unsupported event format");
+    }
     const objectUrl = `https://${bucket}.s3.amazonaws.com/${key}`;
 
     // 1. Retrieve DB and Gemini secrets
     const { DB_HOST, DB_USER, DB_PASS, DB_NAME, GEMINI_API_KEY } =
-      await getSecrets("your-secret-name");
+      await getSecrets("app/secrets");
 
     // 2. Annotate with Gemini
     const annotation = await getAnnotationFromGemini(
@@ -32,10 +38,14 @@ exports.handler = async (event) => {
       database: DB_NAME || "test",
     });
 
-    await connection.execute(
-      "INSERT INTO annotations (s3_key, annotation, created_at) VALUES (?, ?, ?)",
-      [key, annotation, new Date()]
+    const [result] = await connection.execute(
+      "UPDATE images SET caption = ? WHERE s3_key = ?",
+      [annotation, key]
     );
+
+    if (result.affectedRows === 0) {
+      throw new Error("No image record found to update.");
+    }
 
     await connection.end();
 
@@ -71,7 +81,7 @@ async function getAnnotationFromGemini(imageUrl, apiKey) {
   };
 
   const response = await axios.post(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent",
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
     body,
     { params: { key: apiKey } }
   );

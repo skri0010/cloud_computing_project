@@ -1,2 +1,16 @@
 node_modules
 uploads
+*.pem
+*.pub
+*.ssh
+.ssh/
+id_rsa
+id_rsa.*
+id_dsa
+id_dsa.*
+id_ecdsa
+id_ecdsa.*
+id_ed25519
+id_ed25519.*
+known_hosts
+authorized_keys
